@@ -158,3 +158,83 @@ uv run ghtriage pull --repo drivendataorg/cloudpathlib   # second run, should be
 - `src/ghtriage/cli.py` (new) — Phase 1, extended in Phase 2
 - `src/ghtriage/query.py` (new) — Phase 2
 - `tests/test_config.py` (new) — Phase 2
+
+---
+
+## Phase 1 Execution Checklist
+
+### 1) Scope and setup
+
+- [ ] Confirm Phase 1 scope is limited to dependency + `pull` flow + `query`/`schema` stubs
+- [ ] Create branch `codex/phase1-core-pipeline`
+- [ ] Capture baseline CLI behavior (`uv run python -m ghtriage --help`)
+
+### 2) Dependency and environment
+
+- [ ] Add `dlt[duckdb]>=1.0,<2` to `pyproject.toml`
+- [ ] Run `uv sync`
+- [ ] Verify import smoke test (`uv run python -c "import dlt"`)
+
+### 3) Config layer (`src/ghtriage/config.py`)
+
+- [ ] Implement `.ghtriage` path helpers:
+  - [ ] `get_ghtriage_dir()`
+  - [ ] `get_db_path()`
+  - [ ] `get_pipelines_dir()`
+- [ ] Implement GitHub repo parsing:
+  - [ ] `parse_git_remote()` for SSH + HTTPS (`.git` and non-`.git`)
+- [ ] Implement auth resolution:
+  - [ ] `resolve_token()` with precedence `env var > .ghtriage/.env > error`
+  - [ ] `.env` parser supports `KEY=value`, strips whitespace, ignores comments/blank lines
+- [ ] Implement repo resolution:
+  - [ ] `resolve_repo()` with precedence `--repo > .ghtriage/config.toml > git remote`
+
+### 4) Pipeline layer (`src/ghtriage/pipeline.py`)
+
+- [ ] Define dlt REST API source config for:
+  - [ ] `issues` (`/issues`, incremental `updated_at`, `since`, exclude PR rows)
+  - [ ] `pulls` (`/pulls`, incremental cursor on `updated_at`, no server-side `since`)
+  - [ ] `issue_comments` (`/issues/comments`, incremental `updated_at`, `since`)
+  - [ ] `pull_comments` (`/pulls/comments`, incremental `updated_at`, `since`)
+- [ ] Configure write disposition as `merge` with primary key `id`
+- [ ] Implement `create_pipeline()`:
+  - [ ] `dataset_name="github"`
+  - [ ] `pipelines_dir=.ghtriage/pipelines/`
+- [ ] Implement `run_pull()` to execute a pull for resolved repo/token
+- [ ] Implement `--full` behavior:
+  - [ ] Delete `.ghtriage/ghtriage.duckdb` (if present)
+  - [ ] Delete `.ghtriage/pipelines/` (if present)
+  - [ ] Run fresh pull
+
+### 5) CLI wiring (`src/ghtriage/cli.py`, `src/ghtriage/__init__.py`)
+
+- [ ] Implement argparse root command with subcommands:
+  - [ ] `pull` (fully wired)
+  - [ ] `query` (stub with clear "not implemented" message)
+  - [ ] `schema` (stub with clear "not implemented" message)
+- [ ] Wire package entrypoint so `main()` calls `cli.run()`
+
+### 6) Validation (real-world)
+
+- [ ] Run initial pull:
+  - [ ] `uv run ghtriage pull --repo drivendataorg/cloudpathlib`
+- [ ] Verify local artifacts exist:
+  - [ ] `.ghtriage/ghtriage.duckdb`
+  - [ ] `.ghtriage/pipelines/`
+- [ ] Inspect DuckDB tables/columns created by dlt (for Phase 2 query/schema design)
+- [ ] Run second pull to confirm incremental behavior works nominally
+
+### 7) Quality gate
+
+- [ ] Run formatting (`just format`)
+- [ ] Run linting (`just lint`)
+- [ ] Smoke test CLI flows (`pull`, plus stub behavior for `query`/`schema`)
+- [ ] Record known limitations discovered during validation (especially `/pulls` incremental limitations)
+
+### Phase 1 Definition of Done
+
+- [ ] `ghtriage pull` works end-to-end against a real public repo
+- [ ] Data is written to DuckDB in the `github` schema with expected top-level tables
+- [ ] Token and repo resolution precedence works as designed
+- [ ] `--full` reliably rebuilds from clean local state
+- [ ] CLI entrypoint is stable and ready for Phase 2 (`query`/`schema`) work
