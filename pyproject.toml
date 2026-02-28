@@ -17,3 +17,37 @@ ghtriage = "ghtriage:main"
 [build-system]
 requires = ["uv_build>=0.10.2,<0.11.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+  "ruff",
+  "pytest",
+  "coverage",
+  "pytest-cov",
+]
+
+## TOOLS
+
+[tool.ruff]
+line-length = 99
+src = ["src/ghtriage/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = [
+  "E", # Pyflakes
+  "F", # Pycodestyle
+  "I", # isort
+]
+unfixable = ["F"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ghtriage"]
+force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--cov=ghtriage --cov-report=term --cov-report=html --cov-report=xml --cov-append"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["ghtriage"]
