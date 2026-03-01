@@ -6,7 +6,7 @@ from ghtriage.config import get_db_path
 
 
 def _resolve_db_path(cwd: str | Path | None = None) -> Path:
-    db_path = get_db_path(cwd=cwd)
+    db_path = get_db_path(cwd=cwd, create=False)
     if not db_path.exists():
         raise RuntimeError(
             f"Database not found at {db_path}. Run `ghtriage pull` to create it first."

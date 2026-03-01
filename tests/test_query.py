@@ -35,6 +35,13 @@ def test_execute_query_raises_when_db_missing(tmp_path: Path) -> None:
         execute_query("SELECT 1", cwd=tmp_path)
 
 
+def test_execute_query_missing_db_has_no_side_effects(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Database not found"):
+        execute_query("SELECT 1", cwd=tmp_path)
+
+    assert not (tmp_path / ".ghtriage").exists()
+
+
 def test_get_tables_hides_internal_by_default(tmp_path: Path) -> None:
     _create_sample_db(tmp_path)
 
