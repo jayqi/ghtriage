@@ -49,6 +49,7 @@ def test_query_csv_format_success(sample_cwd: Path, monkeypatch, capsys) -> None
     assert rows[1] == ["1", "First"]
     assert rows[2] == ["2", "Second"]
     assert captured.err == ""
+    assert "\r\n" not in captured.out
 
 
 def test_query_json_format_is_strict_jsonl(sample_cwd: Path, monkeypatch, capsys) -> None:

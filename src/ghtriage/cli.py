@@ -67,7 +67,7 @@ def _format_table(columns: list[str], rows: list[tuple]) -> None:
 def _format_csv(columns: list[str], rows: list[tuple]) -> None:
     if not columns:
         return
-    writer = csv.writer(sys.stdout)
+    writer = csv.writer(sys.stdout, lineterminator="\n")
     writer.writerow(columns)
     writer.writerows(rows)
 
