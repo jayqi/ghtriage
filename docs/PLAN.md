@@ -27,17 +27,17 @@ ghtriage schema [--table TABLE_NAME]
 ```
 .ghtriage/
 ├── config.toml          # Committable config: [repo] default, etc.
-├── .env                 # Gitignored: GITHUB_TOKEN=ghp_xxx
+├── token                # Gitignored: raw GitHub token value
 ├── ghtriage.duckdb      # DuckDB database
 └── pipelines/           # dlt pipeline state (incremental cursors)
 ```
 
-Secrets (`.env`, `*.duckdb`) are separated from config (`config.toml`) so that config can be committed while secrets stay gitignored.
+Secrets (`token`, `*.duckdb`) are separated from config (`config.toml`) so that config can be committed while secrets stay gitignored.
 
 ## Auth Resolution Order
 
 1. `GITHUB_TOKEN` env var (standard, works with `gh auth token`)
-2. `.ghtriage/.env` file → `GITHUB_TOKEN=...` (simple key=value parsing, no `python-dotenv` dependency needed)
+2. `.ghtriage/token` file containing a raw token string
 3. Error with instructions if neither found
 
 ## Module Structure
@@ -91,7 +91,7 @@ dlt will auto-unnest nested arrays into child tables (e.g., `issues__labels`, `i
 
 The codebase has two distinct kinds of logic with different testing needs:
 
-**Pure functions (unit-testable):** `config.py` contains deterministic logic — git remote URL parsing, `.env` file parsing, token/repo resolution precedence. These are easy to test in isolation with pytest, no mocking needed beyond environment variables and temp files. This is where unit tests provide the most value.
+**Pure functions (unit-testable):** `config.py` contains deterministic logic — git remote URL parsing, token/repo resolution precedence, and local file parsing. These are easy to test in isolation with pytest, no mocking needed beyond environment variables and temp files. This is where unit tests provide the most value.
 
 **dlt pipeline + DuckDB queries (integration-testable, but costly):** `pipeline.py` and `query.py` interact with external systems (GitHub API, DuckDB). Real integration tests would require API credentials, network access, and take minutes to run. Mocking the GitHub API responses to test the dlt config is possible but brittle — we'd essentially be testing dlt's internals, not our code. The dlt REST API source config is declarative (a dict), so there isn't much logic to unit test.
 
@@ -99,9 +99,9 @@ The codebase has two distinct kinds of logic with different testing needs:
 
 **What to test in `tests/test_config.py`:**
 - `parse_git_remote()` — SSH URLs, HTTPS URLs, HTTPS with `.git` suffix, non-GitHub URLs (should error), malformed URLs
-- `resolve_token()` — env var present, env var missing + .env file present, both missing (should error)
+- `resolve_token()` — env var present, env var missing + token file present, both missing (should error)
 - `resolve_repo()` — CLI override, config.toml default, git remote fallback, precedence order
-- `.env` file parsing — handles `KEY=value`, ignores comments and blank lines, strips whitespace
+- token file parsing — strips whitespace and handles empty file as missing
 
 ## Phase 1: Core Pipeline
 
@@ -110,7 +110,7 @@ Goal: Get `ghtriage pull` working end-to-end and validate that data lands correc
 ### Steps
 
 1. **`pyproject.toml`** — add `dlt[duckdb]>=1.0,<2` dependency
-2. **`src/ghtriage/config.py`** — `resolve_token()`, `resolve_repo()`, `parse_git_remote()`, `get_ghtriage_dir()`, `get_db_path()`, `get_pipelines_dir()`, `.env` file parsing
+2. **`src/ghtriage/config.py`** — `resolve_token()`, `resolve_repo()`, `parse_git_remote()`, `get_ghtriage_dir()`, `get_db_path()`, `get_pipelines_dir()`, token file parsing
 3. **`src/ghtriage/pipeline.py`** — REST API source config dict, `create_pipeline()`, `run_pull()`
 4. **`src/ghtriage/cli.py`** — argparse with `pull` subcommand only (+ stub `query`/`schema`)
 5. **`src/ghtriage/__init__.py`** — wire `main()` to `cli.run()`
@@ -134,10 +134,9 @@ Goal: Build the query and schema commands on top of the confirmed data model fro
 1. **`src/ghtriage/query.py`** — `execute_query()`, `get_tables()`, `get_table_columns()`
 2. **Wire `query` and `schema` subcommands** in `cli.py`
 3. **Output formatting** — table (column-aligned), csv (`csv.writer`), json (JSONL) for `query` command
-4. **Error handling** — clear messages for missing token, bad repo, no DB, SQL errors
-5. **`--full` flag** — delete DuckDB file + pipeline state, then re-pull
-6. **Incremental pull validation** — run a second pull and confirm it's faster
-7. **Unit tests** for `config.py` — git remote parsing (SSH, HTTPS, malformed), token resolution (env var, .env file, missing), repo resolution precedence (CLI > config > git remote)
+4. **Error handling** — clear messages for no DB file, unknown table, SQL errors, and unsupported output format
+5. **Schema ergonomics** — default schema to `github`, and decide whether to hide `_dlt_*` tables in `schema` output
+6. **Unit tests** for query/schema/CLI flows — query execution, output formats, schema introspection, and error paths
 
 ### Validate
 
@@ -146,7 +145,6 @@ uv run ghtriage schema
 uv run ghtriage schema --table issues
 uv run ghtriage query "SELECT number, title, state FROM issues WHERE state='open' LIMIT 5"
 uv run ghtriage query "SELECT count(*) FROM issues" --format json
-uv run ghtriage pull --repo drivendataorg/cloudpathlib   # second run, should be incremental
 ```
 
 ## Files Modified
@@ -184,8 +182,8 @@ uv run ghtriage pull --repo drivendataorg/cloudpathlib   # second run, should be
 - [x] Implement GitHub repo parsing:
   - [x] `parse_git_remote()` for SSH + HTTPS (`.git` and non-`.git`)
 - [x] Implement auth resolution:
-  - [x] `resolve_token()` with precedence `env var > .ghtriage/.env > error`
-  - [x] `.env` parser supports `KEY=value`, strips whitespace, ignores comments/blank lines
+  - [x] `resolve_token()` with precedence `env var > .ghtriage/token > error`
+  - [x] token file parser strips whitespace and treats empty file as missing
 - [x] Implement repo resolution:
   - [x] `resolve_repo()` with precedence `--repo > .ghtriage/config.toml > git remote`
 
@@ -240,3 +238,67 @@ uv run ghtriage pull --repo drivendataorg/cloudpathlib   # second run, should be
 - [x] Token and repo resolution precedence works as designed
 - [x] `--full` reliably rebuilds from clean local state
 - [x] CLI entrypoint is stable and ready for Phase 2 (`query`/`schema`) work
+
+---
+
+## Phase 2 Execution Checklist
+
+### 1) Scope and preflight
+
+- [ ] Confirm scope is limited to implementing `query` + `schema` (no pipeline behavior changes)
+- [ ] Confirm auth behavior remains `GITHUB_TOKEN` env var, then `.ghtriage/token`
+- [ ] Capture current stub behavior for baseline (`uv run ghtriage query "SELECT 1"`, `uv run ghtriage schema`)
+- [ ] Confirm local Phase 1 artifacts are present (`.ghtriage/ghtriage.duckdb`, `.ghtriage/pipelines/`)
+
+### 2) Query module implementation (`src/ghtriage/query.py`)
+
+- [ ] Add DuckDB connection helper that targets `.ghtriage/ghtriage.duckdb`
+- [ ] Fail with clear error when DB file does not exist
+- [ ] Implement `execute_query(sql)` and set schema with `SET schema = 'github'`
+- [ ] Implement `get_tables()` and `get_table_columns(table_name)` introspection helpers
+- [ ] Decide and document behavior for internal `_dlt_*` tables in schema output
+
+### 3) CLI wiring (`src/ghtriage/cli.py`)
+
+- [ ] Replace `query` stub with real execution path
+- [ ] Replace `schema` stub with table/column output path
+- [ ] Implement output formatters for query results:
+  - [ ] `table` (column-aligned)
+  - [ ] `csv`
+  - [ ] `json` (JSONL)
+- [ ] Return stable non-zero exit codes for user-facing failures
+- [ ] Ensure error messages are actionable (missing DB, bad SQL, unknown table)
+
+### 4) Tests (TDD, local-only)
+
+- [ ] Add `tests/test_query.py` for:
+  - [ ] query execution against temp DuckDB fixture
+  - [ ] `table` / `csv` / `json` output behavior
+  - [ ] schema introspection behavior
+  - [ ] missing DB and SQL error paths
+- [ ] Add/extend CLI tests to verify command dispatch and exit codes for `query`/`schema`
+- [ ] Keep tests offline (no GitHub API calls)
+
+### 5) Validation and quality gate
+
+- [ ] Run formatting (`just format`)
+- [ ] Run linting (`just lint`)
+- [ ] Run tests (`just test`)
+- [ ] Manual smoke checks:
+  - [ ] `uv run ghtriage schema`
+  - [ ] `uv run ghtriage schema --table issues`
+  - [ ] `uv run ghtriage query "SELECT number, title, state FROM issues LIMIT 5"`
+  - [ ] `uv run ghtriage query "SELECT count(*) AS n FROM issues" --format json`
+
+### 6) Documentation and release readiness
+
+- [ ] Update `README.md` examples to match actual Phase 2 command behavior
+- [ ] Record known limitations discovered during Phase 2 validation
+- [ ] Confirm no stale "Phase 2 planned" stub messages remain in user-facing CLI output
+
+### Phase 2 Risks and Gaps to Track
+
+- [ ] **Schema noise risk:** `_dlt_*` tables may clutter `schema` output unless filtered/documented
+- [ ] **Output readability risk:** very wide tables (`issues`, `pulls`) can produce hard-to-read table output
+- [ ] **Error UX risk:** ensure missing DB vs SQL syntax vs unknown table failures are clearly differentiated
+- [ ] **Docs drift risk:** keep README/PLAN aligned with implemented auth and command semantics
