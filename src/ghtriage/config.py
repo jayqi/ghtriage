@@ -35,8 +35,8 @@ def get_ghtriage_dir(cwd: str | Path | None = None, create: bool = True) -> Path
     return ghtriage_dir
 
 
-def get_db_path(cwd: str | Path | None = None) -> Path:
-    return get_ghtriage_dir(cwd=cwd) / "ghtriage.duckdb"
+def get_db_path(cwd: str | Path | None = None, create: bool = True) -> Path:
+    return get_ghtriage_dir(cwd=cwd, create=create) / "ghtriage.duckdb"
 
 
 def get_pipelines_dir(cwd: str | Path | None = None) -> Path:

@@ -18,5 +18,5 @@ format *args:
 
 # Run test suite (variadic)
 test *args:
-    uv run --isolated --no-editable -- \
+    uv run --isolated --no-editable --reinstall-package=ghtriage -- \
         python -I -m pytest {{args}}
