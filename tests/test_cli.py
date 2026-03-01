@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from ghtriage.cli import run
 
 
-def _make_sample_db(cwd: Path) -> None:
-    db_path = cwd / ".ghtriage" / "ghtriage.duckdb"
+@pytest.fixture
+def sample_cwd(tmp_path: Path) -> Path:
+    db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     con = duckdb.connect(str(db_path))
@@ -18,10 +20,11 @@ def _make_sample_db(cwd: Path) -> None:
     con.execute("INSERT INTO github.issues VALUES (1, 'First', 'open'), (2, 'Second', 'closed')")
     con.close()
 
+    return tmp_path
 
-def test_query_table_format_success(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+
+def test_query_table_format_success(sample_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["query", "SELECT id, title FROM issues ORDER BY id", "--format", "table"])
 
@@ -33,9 +36,8 @@ def test_query_table_format_success(tmp_path: Path, monkeypatch, capsys) -> None
     assert captured.err == ""
 
 
-def test_query_csv_format_success(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_query_csv_format_success(sample_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["query", "SELECT id, title FROM issues ORDER BY id", "--format", "csv"])
 
@@ -49,9 +51,8 @@ def test_query_csv_format_success(tmp_path: Path, monkeypatch, capsys) -> None:
     assert captured.err == ""
 
 
-def test_query_json_format_is_strict_jsonl(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_query_json_format_is_strict_jsonl(sample_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["query", "SELECT id, state FROM issues ORDER BY id", "--format", "json"])
 
@@ -74,9 +75,8 @@ def test_query_returns_runtime_error_for_missing_db(tmp_path: Path, monkeypatch,
     assert "Database not found" in captured.err
 
 
-def test_query_returns_runtime_error_for_bad_sql(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_query_returns_runtime_error_for_bad_sql(sample_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["query", "SELEC id FROM issues"])
 
@@ -85,14 +85,13 @@ def test_query_returns_runtime_error_for_bad_sql(tmp_path: Path, monkeypatch, ca
     assert captured.err
 
 
-def test_schema_lists_user_tables(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
+def test_schema_lists_user_tables(sample_cwd: Path, monkeypatch, capsys) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
     con = duckdb.connect(str(db_path))
     con.execute("CREATE TABLE github._dlt_loads (load_id VARCHAR)")
     con.close()
 
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["schema"])
 
@@ -102,9 +101,8 @@ def test_schema_lists_user_tables(tmp_path: Path, monkeypatch, capsys) -> None:
     assert "_dlt_loads" not in captured.out
 
 
-def test_schema_table_details(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_schema_table_details(sample_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["schema", "--table", "issues"])
 
@@ -114,9 +112,10 @@ def test_schema_table_details(tmp_path: Path, monkeypatch, capsys) -> None:
     assert "BIGINT" in captured.out
 
 
-def test_schema_unknown_table_returns_runtime_error(tmp_path: Path, monkeypatch, capsys) -> None:
-    _make_sample_db(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_schema_unknown_table_returns_runtime_error(
+    sample_cwd: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(sample_cwd)
 
     rc = run(["schema", "--table", "missing"])
 
