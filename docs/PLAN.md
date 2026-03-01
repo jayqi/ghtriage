@@ -243,20 +243,24 @@ uv run ghtriage query "SELECT count(*) FROM issues" --format json
 
 ## Phase 2 Execution Checklist
 
+### For Every PR (Recurring)
+
+Run formatting on touched files (`just format ...`), run linting (`just lint ...`), and run targeted tests (`just test ...`) before opening/updating the PR.
+
 ### 1) Scope and preflight
 
-- [ ] Confirm scope is limited to implementing `query` + `schema` (no pipeline behavior changes)
-- [ ] Confirm auth behavior remains `GITHUB_TOKEN` env var, then `.ghtriage/token`
-- [ ] Capture current stub behavior for baseline (`uv run ghtriage query "SELECT 1"`, `uv run ghtriage schema`)
-- [ ] Confirm local Phase 1 artifacts are present (`.ghtriage/ghtriage.duckdb`, `.ghtriage/pipelines/`)
+- [x] Confirm scope is limited to implementing `query` + `schema` (no pipeline behavior changes)
+- [x] Confirm auth behavior remains `GITHUB_TOKEN` env var, then `.ghtriage/token`
+- [x] Capture current stub behavior for baseline (`uv run ghtriage query "SELECT 1"`, `uv run ghtriage schema`)
+- [x] Confirm local Phase 1 artifacts are present (`.ghtriage/ghtriage.duckdb`, `.ghtriage/pipelines/`)
 
 ### 2) Query module implementation (`src/ghtriage/query.py`)
 
-- [ ] Add DuckDB connection helper that targets `.ghtriage/ghtriage.duckdb`
-- [ ] Fail with clear error when DB file does not exist
-- [ ] Implement `execute_query(sql)` and set schema with `SET schema = 'github'`
-- [ ] Implement `get_tables()` and `get_table_columns(table_name)` introspection helpers
-- [ ] Decide and document behavior for internal `_dlt_*` tables in schema output
+- [x] Add DuckDB connection helper that targets `.ghtriage/ghtriage.duckdb`
+- [x] Fail with clear error when DB file does not exist
+- [x] Implement `execute_query(sql)` and set schema with `SET schema = 'github'`
+- [x] Implement `get_tables()` and `get_table_columns(table_name)` introspection helpers
+- [x] Decide behavior for internal `_dlt_*` tables in schema output (hide by default in `get_tables()`, optional include via flag)
 
 ### 3) CLI wiring (`src/ghtriage/cli.py`)
 
@@ -271,19 +275,16 @@ uv run ghtriage query "SELECT count(*) FROM issues" --format json
 
 ### 4) Tests (TDD, local-only)
 
-- [ ] Add `tests/test_query.py` for:
-  - [ ] query execution against temp DuckDB fixture
+- [x] Add `tests/test_query.py` for:
+  - [x] query execution against temp DuckDB fixture
   - [ ] `table` / `csv` / `json` output behavior
-  - [ ] schema introspection behavior
-  - [ ] missing DB and SQL error paths
+  - [x] schema introspection behavior
+  - [x] missing DB and SQL error paths
 - [ ] Add/extend CLI tests to verify command dispatch and exit codes for `query`/`schema`
-- [ ] Keep tests offline (no GitHub API calls)
+- [x] Keep tests offline (no GitHub API calls)
 
 ### 5) Validation and quality gate
 
-- [ ] Run formatting (`just format`)
-- [ ] Run linting (`just lint`)
-- [ ] Run tests (`just test`)
 - [ ] Manual smoke checks:
   - [ ] `uv run ghtriage schema`
   - [ ] `uv run ghtriage schema --table issues`
