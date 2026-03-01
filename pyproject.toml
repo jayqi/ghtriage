@@ -9,7 +9,10 @@ authors = [
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "dlt[duckdb]>=1.0,<2",
+    "tomli>=2.0.1; python_version < '3.11'",
+]
 
 [project.scripts]
 ghtriage = "ghtriage:main"

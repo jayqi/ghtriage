@@ -1,2 +1,5 @@
+from ghtriage.cli import run
+
+
 def main() -> None:
-    print("Hello from ghtriage!")
+    raise SystemExit(run())
