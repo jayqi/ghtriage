@@ -264,42 +264,43 @@ Run formatting on touched files (`just format ...`), run linting (`just lint ...
 
 ### 3) CLI wiring (`src/ghtriage/cli.py`)
 
-- [ ] Replace `query` stub with real execution path
-- [ ] Replace `schema` stub with table/column output path
-- [ ] Implement output formatters for query results:
-  - [ ] `table` (column-aligned)
-  - [ ] `csv`
-  - [ ] `json` (JSONL)
-- [ ] Return stable non-zero exit codes for user-facing failures
-- [ ] Ensure error messages are actionable (missing DB, bad SQL, unknown table)
+- [x] Replace `query` stub with real execution path
+- [x] Replace `schema` stub with table/column output path
+- [x] Implement output formatters for query results:
+  - [x] `table` (column-aligned)
+  - [x] `csv`
+  - [x] `json` (JSONL)
+- [x] Return stable non-zero exit codes for user-facing failures
+- [x] Ensure error messages are actionable (missing DB, bad SQL, unknown table)
 
 ### 4) Tests (TDD, local-only)
 
 - [x] Add `tests/test_query.py` for:
   - [x] query execution against temp DuckDB fixture
-  - [ ] `table` / `csv` / `json` output behavior
+  - [x] `table` / `csv` / `json` output behavior (covered via CLI tests)
   - [x] schema introspection behavior
   - [x] missing DB and SQL error paths
-- [ ] Add/extend CLI tests to verify command dispatch and exit codes for `query`/`schema`
+- [x] Add/extend CLI tests to verify command dispatch and exit codes for `query`/`schema`
 - [x] Keep tests offline (no GitHub API calls)
 
 ### 5) Validation and quality gate
 
-- [ ] Manual smoke checks:
-  - [ ] `uv run ghtriage schema`
-  - [ ] `uv run ghtriage schema --table issues`
-  - [ ] `uv run ghtriage query "SELECT number, title, state FROM issues LIMIT 5"`
-  - [ ] `uv run ghtriage query "SELECT count(*) AS n FROM issues" --format json`
+- [x] Manual smoke checks:
+  - [x] `uv run ghtriage schema`
+  - [x] `uv run ghtriage schema --table issues`
+  - [x] `uv run ghtriage query "SELECT number, title, state FROM issues LIMIT 5"`
+  - [x] `uv run ghtriage query "SELECT count(*) AS n FROM issues" --format json`
 
 ### 6) Documentation and release readiness
 
-- [ ] Update `README.md` examples to match actual Phase 2 command behavior
-- [ ] Record known limitations discovered during Phase 2 validation
-- [ ] Confirm no stale "Phase 2 planned" stub messages remain in user-facing CLI output
+- [x] Update `README.md` examples to match actual Phase 2 command behavior
+- [x] Record known limitations discovered during Phase 2 validation
+  - [x] Note: `--format table` prints full values by design, so wide columns can be hard to scan in narrow terminals.
+- [x] Confirm no stale "Phase 2 planned" stub messages remain in user-facing CLI output
 
 ### Phase 2 Risks and Gaps to Track
 
-- [ ] **Schema noise risk:** `_dlt_*` tables may clutter `schema` output unless filtered/documented
-- [ ] **Output readability risk:** very wide tables (`issues`, `pulls`) can produce hard-to-read table output
-- [ ] **Error UX risk:** ensure missing DB vs SQL syntax vs unknown table failures are clearly differentiated
-- [ ] **Docs drift risk:** keep README/PLAN aligned with implemented auth and command semantics
+- [x] **Schema noise risk:** `_dlt_*` tables are hidden by default in `schema` output.
+- [x] **Output readability risk:** accepted tradeoff for now; `table` output intentionally prints full values.
+- [x] **Error UX risk:** missing DB, SQL errors, and unknown table errors return non-zero with actionable messages.
+- [x] **Docs drift risk:** README and PLAN updated to match implemented command behavior.
