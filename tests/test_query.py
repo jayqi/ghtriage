@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import duckdb
 import pytest
@@ -28,6 +29,29 @@ def test_execute_query_uses_github_schema(tmp_path: Path) -> None:
 
     assert columns == ["id", "title"]
     assert rows == [(1, "A"), (2, "B")]
+
+
+def test_execute_query_returns_empty_when_cursor_has_no_description(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.write_text("", encoding="utf-8")
+
+    cursor = MagicMock()
+    cursor.description = None
+
+    connection = MagicMock()
+    connection.execute.side_effect = [cursor, cursor]
+    connection.__enter__.return_value = connection
+    connection.__exit__.return_value = None
+
+    monkeypatch.setattr("ghtriage.query.duckdb.connect", lambda _: connection)
+
+    columns, rows = execute_query("CREATE TABLE write_probe (id BIGINT)", cwd=tmp_path)
+
+    assert columns == []
+    assert rows == []
 
 
 def test_execute_query_raises_when_db_missing(tmp_path: Path) -> None:
