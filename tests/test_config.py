@@ -1,12 +1,9 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest
 
 from ghtriage.config import (
     get_ghtriage_dir,
-    parse_env_file,
     parse_git_remote,
     resolve_repo,
     resolve_token,
@@ -40,25 +37,6 @@ def test_parse_git_remote_invalid(remote_url: str) -> None:
         parse_git_remote(remote_url)
 
 
-def test_parse_env_file_ignores_comments_and_whitespace(tmp_path: Path) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        "\n".join(
-            [
-                "# comment",
-                "",
-                "GITHUB_TOKEN = token-from-file",
-                "export OTHER_VALUE=abc123",
-                "IGNORED_LINE",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    parsed = parse_env_file(env_file)
-    assert parsed == {"GITHUB_TOKEN": "token-from-file", "OTHER_VALUE": "abc123"}
-
-
 def test_get_ghtriage_dir_creates_local_gitignore(tmp_path: Path) -> None:
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path, create=True)
     gitignore_path = ghtriage_dir / ".gitignore"
@@ -66,16 +44,23 @@ def test_get_ghtriage_dir_creates_local_gitignore(tmp_path: Path) -> None:
     assert gitignore_path.read_text(encoding="utf-8") == "*\n!.gitignore\n!config.toml\n"
 
 
-def test_resolve_token_prefers_environment_over_env_file(tmp_path: Path) -> None:
+def test_resolve_token_prefers_environment_over_token_file(tmp_path: Path) -> None:
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
-    (ghtriage_dir / ".env").write_text("GITHUB_TOKEN=file-token\n", encoding="utf-8")
+    (ghtriage_dir / "token").write_text("file-token\n", encoding="utf-8")
 
     assert resolve_token(cwd=tmp_path, env={"GITHUB_TOKEN": "env-token"}) == "env-token"
 
 
-def test_resolve_token_reads_env_file(tmp_path: Path) -> None:
+def test_resolve_token_reads_token_file(tmp_path: Path) -> None:
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
-    (ghtriage_dir / ".env").write_text("GITHUB_TOKEN=file-token\n", encoding="utf-8")
+    (ghtriage_dir / "token").write_text("file-token\n", encoding="utf-8")
+
+    assert resolve_token(cwd=tmp_path, env={}) == "file-token"
+
+
+def test_resolve_token_strips_whitespace_from_token_file(tmp_path: Path) -> None:
+    ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
+    (ghtriage_dir / "token").write_text("  file-token  \n", encoding="utf-8")
 
     assert resolve_token(cwd=tmp_path, env={}) == "file-token"
 
@@ -110,3 +95,11 @@ def test_resolve_repo_falls_back_to_git_remote(
         lambda cwd=None: "https://github.com/owner/from-git.git",
     )
     assert resolve_repo(cwd=tmp_path) == "owner/from-git"
+
+
+def test_resolve_repo_raises_on_invalid_config_toml(tmp_path: Path) -> None:
+    ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
+    (ghtriage_dir / "config.toml").write_text("[repo\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError):
+        resolve_repo(cwd=tmp_path)

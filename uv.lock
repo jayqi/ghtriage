@@ -356,6 +356,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dlt", extra = ["duckdb"] },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -367,7 +368,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dlt", extras = ["duckdb"], specifier = ">=1.0,<2" }]
+requires-dist = [
+    { name = "dlt", extras = ["duckdb"], specifier = ">=1.0,<2" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
+]
 
 [package.metadata.requires-dev]
 dev = [

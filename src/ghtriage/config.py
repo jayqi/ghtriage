@@ -1,12 +1,22 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
 import re
 import subprocess
+import textwrap
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python <3.11
+    import tomli as tomllib
 
 REPO_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-LOCAL_GITIGNORE_CONTENT = "*\n!.gitignore\n!config.toml\n"
+LOCAL_GITIGNORE_CONTENT = textwrap.dedent(
+    """\
+    *
+    !.gitignore
+    !config.toml
+    """
+)
 
 
 def _ensure_local_gitignore(ghtriage_dir: Path) -> None:
@@ -57,28 +67,11 @@ def parse_git_remote(remote_url: str) -> str:
     raise ValueError(f"Remote is not a GitHub URL: {remote_url}")
 
 
-def parse_env_file(path: Path) -> dict[str, str]:
+def _read_token_file(path: Path) -> str | None:
     if not path.exists():
-        return {}
-
-    parsed: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line.removeprefix("export ").strip()
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        parsed[key] = value
-    return parsed
+        return None
+    token = path.read_text(encoding="utf-8").strip()
+    return token or None
 
 
 def resolve_token(cwd: str | Path | None = None, env: dict[str, str] | None = None) -> str:
@@ -88,35 +81,33 @@ def resolve_token(cwd: str | Path | None = None, env: dict[str, str] | None = No
         return token
 
     ghtriage_dir = get_ghtriage_dir(cwd=cwd, create=False)
-    env_file_values = parse_env_file(ghtriage_dir / ".env")
-    token = env_file_values.get("GITHUB_TOKEN")
+    token = _read_token_file(ghtriage_dir / "token")
     if token:
         return token
 
     raise RuntimeError(
-        "Missing GitHub token. Set GITHUB_TOKEN or add GITHUB_TOKEN=... to .ghtriage/.env."
+        "Missing GitHub token. Set GITHUB_TOKEN or place a token in .ghtriage/token."
     )
 
 
 def _default_repo_from_config(config_path: Path) -> str | None:
     if not config_path.exists():
         return None
+    try:
+        with config_path.open("rb") as file_obj:
+            config_data = tomllib.load(file_obj)
+    except tomllib.TOMLDecodeError as exc:
+        raise RuntimeError(f"Invalid TOML in {config_path}: {exc}") from exc
 
-    in_repo_section = False
-    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            in_repo_section = line[1:-1].strip() == "repo"
-            continue
-        if not in_repo_section:
-            continue
-
-        match = re.match(r'^default\s*=\s*["\']([^"\']+)["\']\s*$', line)
-        if match:
-            return match.group(1).strip()
-    return None
+    repo_data = config_data.get("repo")
+    if not isinstance(repo_data, dict):
+        return None
+    default_repo = repo_data.get("default")
+    if default_repo is None:
+        return None
+    if not isinstance(default_repo, str):
+        raise RuntimeError(f"Invalid [repo].default in {config_path}: expected a string")
+    return default_repo.strip()
 
 
 def _validate_repo_slug(repo: str) -> str:
