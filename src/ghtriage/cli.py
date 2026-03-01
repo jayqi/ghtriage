@@ -58,4 +58,3 @@ def run(argv: Sequence[str] | None = None) -> int:
         return _not_implemented("schema")
 
     parser.error(f"Unknown command: {args.command}")
-    return 2
