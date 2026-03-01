@@ -5,7 +5,7 @@ from typing import Any
 import dlt
 from dlt.sources.rest_api import rest_api_source
 
-from ghtriage.config import get_db_path, get_ghtriage_dir, get_pipelines_dir
+from ghtriage.config import get_db_path, get_pipelines_dir
 
 
 def _split_repo(repo: str) -> tuple[str, str]:
@@ -124,9 +124,8 @@ def run_pull(
     full: bool = False,
     cwd: str | Path | None = None,
 ):
-    ghtriage_dir = get_ghtriage_dir(cwd=cwd)
-    db_path = ghtriage_dir / "ghtriage.duckdb"
-    pipelines_dir = ghtriage_dir / "pipelines"
+    db_path = get_db_path(cwd=cwd)
+    pipelines_dir = get_pipelines_dir(cwd=cwd)
 
     if full:
         if db_path.exists():
