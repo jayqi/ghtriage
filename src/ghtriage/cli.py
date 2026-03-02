@@ -1,12 +1,13 @@
 import argparse
 import csv
 import json
+from pathlib import Path
 import sys
 from typing import Sequence
 
-from ghtriage.config import resolve_repo, resolve_token
+from ghtriage.config import get_db_path, resolve_repo, resolve_token
 from ghtriage.pipeline import run_pull
-from ghtriage.query import execute_query, get_table_columns, get_tables
+from ghtriage.query import execute_query, get_status_data, get_table_columns, get_tables
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -33,12 +34,20 @@ def _build_parser() -> argparse.ArgumentParser:
     schema_parser = subparsers.add_parser("schema", help="Inspect schema")
     schema_parser.add_argument("--table", help="Table name")
 
+    subparsers.add_parser("status", help="Show database state and data summary")
+
     return parser
 
 
 def _run_pull(args: argparse.Namespace) -> int:
     repo = resolve_repo(cli_repo=args.repo)
-    token = resolve_token()
+    token, _ = resolve_token()
+    if token is None:
+        print(
+            "Missing GitHub token. Set GITHUB_TOKEN or place a token in .ghtriage/token.",
+            file=sys.stderr,
+        )
+        return 1
     load_info = run_pull(repo=repo, token=token, full=args.full)
     print(f"Pull completed for {repo}")
     print(load_info)
@@ -120,6 +129,68 @@ def _run_schema(args: argparse.Namespace) -> int:
         return 1
 
 
+def _format_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def _format_pull_at(iso_str: str) -> str:
+    return iso_str.replace("T", " ").replace("Z", " UTC")
+
+
+def _run_status(args: argparse.Namespace) -> int:
+    try:
+        config_repo: str | None = resolve_repo()
+    except Exception:
+        config_repo = None
+
+    _, token_source = resolve_token()
+
+    db_path = get_db_path(create=False)
+    try:
+        display_db_path = db_path.relative_to(Path.cwd())
+    except ValueError:
+        display_db_path = db_path
+
+    print(f"Config repo:  {config_repo or 'unknown'}")
+    print(f"Token:        {token_source}")
+
+    if not db_path.exists():
+        print(f"Database:     {display_db_path} (not yet pulled)")
+        return 0
+
+    try:
+        status = get_status_data()
+    except Exception as exc:
+        print(f"Database:     {display_db_path}", file=sys.stderr)
+        print(f"Error reading status: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"DB repo:      {status.db_repo or 'unknown'}")
+    print(f"Database:     {display_db_path} ({_format_size(status.db_size_bytes)})")
+    print(
+        f"Last pull:    "
+        f"{_format_pull_at(status.last_pull_at) if status.last_pull_at else 'unknown'}"
+    )
+
+    if config_repo and status.db_repo and config_repo != status.db_repo:
+        print()
+        print(f"WARNING: Config repo does not match DB repo. Next pull will target {config_repo}.")
+        print(f"         Run `ghtriage pull --full` to rebuild for {config_repo}.")
+
+    if status.table_stats:
+        print()
+        _format_table(
+            ["Table", "Rows", "Latest updated_at"],
+            [(name, f"{count:,}", max_upd or "—") for name, count, max_upd in status.table_stats],
+        )
+
+    return 0
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -130,5 +201,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         return _run_query(args)
     if args.command == "schema":
         return _run_schema(args)
+    if args.command == "status":
+        return _run_status(args)
 
     parser.error(f"Unknown command: {args.command}")

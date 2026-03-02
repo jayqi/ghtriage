@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 from typing import Any
 
 import dlt
 from dlt.sources.rest_api import rest_api_source
+import duckdb
 
 from ghtriage.config import get_db_path, get_pipelines_dir
 
@@ -104,6 +106,31 @@ def build_rest_api_source(repo: str, token: str):
     return rest_api_source(source_config)
 
 
+def _write_meta(db_path: Path, repo: str, full: bool) -> None:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("CREATE SCHEMA IF NOT EXISTS github")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS github._ghtriage_meta (
+                key   VARCHAR PRIMARY KEY,
+                value VARCHAR
+            )
+        """)
+        for key, value in [
+            ("repo", repo),
+            ("last_pull_at", now),
+            ("last_full_pull", str(full).lower()),
+        ]:
+            conn.execute(
+                """
+                INSERT INTO github._ghtriage_meta (key, value)
+                VALUES (?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = excluded.value
+                """,
+                [key, value],
+            )
+
+
 def create_pipeline(cwd: str | Path | None = None):
     db_path = get_db_path(cwd=cwd)
     pipelines_dir = get_pipelines_dir(cwd=cwd)
@@ -135,4 +162,6 @@ def run_pull(
 
     pipeline = create_pipeline(cwd=cwd)
     source = build_rest_api_source(repo=repo, token=token)
-    return pipeline.run(source)
+    load_info = pipeline.run(source)
+    _write_meta(db_path=db_path, repo=repo, full=full)
+    return load_info

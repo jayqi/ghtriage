@@ -1,7 +1,9 @@
 from pathlib import Path
 from unittest.mock import Mock
 
-from ghtriage.pipeline import run_pull
+import duckdb
+
+from ghtriage.pipeline import _write_meta, run_pull
 
 
 def _install_pipeline_mocks(monkeypatch):
@@ -18,6 +20,7 @@ def _install_pipeline_mocks(monkeypatch):
     monkeypatch.setattr("ghtriage.pipeline.dlt.destinations.duckdb", mock_duckdb_factory)
     monkeypatch.setattr("ghtriage.pipeline.dlt.pipeline", mock_pipeline_factory)
     monkeypatch.setattr("ghtriage.pipeline.rest_api_source", mock_rest_api_source)
+    monkeypatch.setattr("ghtriage.pipeline._write_meta", Mock())
 
     return (
         sentinel_destination,
@@ -124,3 +127,37 @@ def test_run_pull_builds_source_with_repo_and_token(tmp_path: Path, monkeypatch)
     config = mock_rest_api_source.call_args.args[0]
     assert config["client"]["base_url"] == "https://api.github.com/repos/abc/def/"
     assert config["client"]["auth"]["token"] == "secret"
+
+
+def test_write_meta_upserts_expected_keys(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.duckdb"
+    _write_meta(db_path=db_path, repo="owner/repo", full=False)
+
+    with duckdb.connect(str(db_path)) as conn:
+        meta = dict(conn.execute("SELECT key, value FROM github._ghtriage_meta").fetchall())
+
+    assert meta["repo"] == "owner/repo"
+    assert meta["last_full_pull"] == "false"
+    assert "T" in meta["last_pull_at"] and meta["last_pull_at"].endswith("Z")
+
+
+def test_write_meta_records_full_flag(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.duckdb"
+    _write_meta(db_path=db_path, repo="owner/repo", full=True)
+
+    with duckdb.connect(str(db_path)) as conn:
+        meta = dict(conn.execute("SELECT key, value FROM github._ghtriage_meta").fetchall())
+
+    assert meta["last_full_pull"] == "true"
+
+
+def test_write_meta_is_idempotent(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.duckdb"
+    _write_meta(db_path=db_path, repo="owner/repo-a", full=False)
+    _write_meta(db_path=db_path, repo="owner/repo-b", full=True)
+
+    with duckdb.connect(str(db_path)) as conn:
+        meta = dict(conn.execute("SELECT key, value FROM github._ghtriage_meta").fetchall())
+
+    assert meta["repo"] == "owner/repo-b"
+    assert meta["last_full_pull"] == "true"
