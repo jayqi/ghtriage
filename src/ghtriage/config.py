@@ -91,7 +91,6 @@ def resolve_token(
     return None, "not configured"
 
 
-
 def _default_repo_from_config(config_path: Path) -> str | None:
     if not config_path.exists():
         return None

@@ -100,7 +100,7 @@ def get_status_data(cwd: str | Path | None = None) -> StatusData:
             last_pull_at = meta.get("last_pull_at")
             if (raw := meta.get("last_full_pull")) is not None:
                 last_full_pull = raw == "true"
-        except Exception:
+        except duckdb.CatalogException:
             pass
 
         table_stats = []

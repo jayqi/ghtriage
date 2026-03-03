@@ -20,7 +20,8 @@ def _install_pipeline_mocks(monkeypatch):
     monkeypatch.setattr("ghtriage.pipeline.dlt.destinations.duckdb", mock_duckdb_factory)
     monkeypatch.setattr("ghtriage.pipeline.dlt.pipeline", mock_pipeline_factory)
     monkeypatch.setattr("ghtriage.pipeline.rest_api_source", mock_rest_api_source)
-    monkeypatch.setattr("ghtriage.pipeline._write_meta", Mock())
+    mock_write_meta = Mock()
+    monkeypatch.setattr("ghtriage.pipeline._write_meta", mock_write_meta)
 
     return (
         sentinel_destination,
@@ -30,6 +31,7 @@ def _install_pipeline_mocks(monkeypatch):
         mock_pipeline_obj,
         mock_pipeline_factory,
         mock_rest_api_source,
+        mock_write_meta,
     )
 
 
@@ -42,11 +44,13 @@ def test_run_pull_smoke_full_false_calls_pipeline_run_once(tmp_path: Path, monke
         mock_pipeline_obj,
         mock_pipeline_factory,
         mock_rest_api_source,
+        mock_write_meta,
     ) = _install_pipeline_mocks(monkeypatch)
 
-    result = run_pull(repo="owner/repo", token="tok", full=False, cwd=tmp_path)
+    load_info, meta_error = run_pull(repo="owner/repo", token="tok", full=False, cwd=tmp_path)
 
-    assert result is sentinel_run_result
+    assert load_info is sentinel_run_result
+    assert meta_error is None
     mock_pipeline_obj.run.assert_called_once_with(sentinel_source)
 
     db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
@@ -65,6 +69,8 @@ def test_run_pull_smoke_full_false_calls_pipeline_run_once(tmp_path: Path, monke
     resource_names = [resource["name"] for resource in config["resources"]]
     assert resource_names == ["issues", "pulls", "issue_comments", "pull_comments"]
 
+    mock_write_meta.assert_called_once_with(db_path=db_path, repo="owner/repo", full=False)
+
 
 def test_run_pull_full_true_removes_existing_state_then_runs(tmp_path: Path, monkeypatch) -> None:
     (
@@ -75,6 +81,7 @@ def test_run_pull_full_true_removes_existing_state_then_runs(tmp_path: Path, mon
         mock_pipeline_obj,
         _mock_pipeline_factory,
         _mock_rest_api_source,
+        _mock_write_meta,
     ) = _install_pipeline_mocks(monkeypatch)
 
     ghtriage_dir = tmp_path / ".ghtriage"
@@ -86,9 +93,10 @@ def test_run_pull_full_true_removes_existing_state_then_runs(tmp_path: Path, mon
     old_pipeline_file.write_text("old", encoding="utf-8")
     old_db_path.write_text("old", encoding="utf-8")
 
-    result = run_pull(repo="owner/repo", token="tok", full=True, cwd=tmp_path)
+    load_info, meta_error = run_pull(repo="owner/repo", token="tok", full=True, cwd=tmp_path)
 
-    assert result is sentinel_run_result
+    assert load_info is sentinel_run_result
+    assert meta_error is None
     assert not old_db_path.exists()
     assert not old_pipeline_file.exists()
     mock_pipeline_obj.run.assert_called_once_with(sentinel_source)
@@ -103,11 +111,13 @@ def test_run_pull_full_true_handles_missing_state(tmp_path: Path, monkeypatch) -
         mock_pipeline_obj,
         _mock_pipeline_factory,
         _mock_rest_api_source,
+        _mock_write_meta,
     ) = _install_pipeline_mocks(monkeypatch)
 
-    result = run_pull(repo="owner/repo", token="tok", full=True, cwd=tmp_path)
+    load_info, meta_error = run_pull(repo="owner/repo", token="tok", full=True, cwd=tmp_path)
 
-    assert result is sentinel_run_result
+    assert load_info is sentinel_run_result
+    assert meta_error is None
     mock_pipeline_obj.run.assert_called_once_with(sentinel_source)
 
 
@@ -120,6 +130,7 @@ def test_run_pull_builds_source_with_repo_and_token(tmp_path: Path, monkeypatch)
         _mock_pipeline_obj,
         _mock_pipeline_factory,
         mock_rest_api_source,
+        _mock_write_meta,
     ) = _install_pipeline_mocks(monkeypatch)
 
     run_pull(repo="abc/def", token="secret", full=False, cwd=tmp_path)

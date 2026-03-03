@@ -163,5 +163,9 @@ def run_pull(
     pipeline = create_pipeline(cwd=cwd)
     source = build_rest_api_source(repo=repo, token=token)
     load_info = pipeline.run(source)
-    _write_meta(db_path=db_path, repo=repo, full=full)
-    return load_info
+    meta_error: Exception | None = None
+    try:
+        _write_meta(db_path=db_path, repo=repo, full=full)
+    except Exception as exc:
+        meta_error = exc
+    return load_info, meta_error
