@@ -48,26 +48,32 @@ def test_resolve_token_prefers_environment_over_token_file(tmp_path: Path) -> No
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
     (ghtriage_dir / "token").write_text("file-token\n", encoding="utf-8")
 
-    assert resolve_token(cwd=tmp_path, env={"GITHUB_TOKEN": "env-token"}) == "env-token"
+    token, source = resolve_token(cwd=tmp_path, env={"GITHUB_TOKEN": "env-token"})
+    assert token == "env-token"
+    assert source == "GITHUB_TOKEN (env)"
 
 
 def test_resolve_token_reads_token_file(tmp_path: Path) -> None:
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
     (ghtriage_dir / "token").write_text("file-token\n", encoding="utf-8")
 
-    assert resolve_token(cwd=tmp_path, env={}) == "file-token"
+    token, source = resolve_token(cwd=tmp_path, env={})
+    assert token == "file-token"
+    assert "file" in source
 
 
 def test_resolve_token_strips_whitespace_from_token_file(tmp_path: Path) -> None:
     ghtriage_dir = get_ghtriage_dir(cwd=tmp_path)
     (ghtriage_dir / "token").write_text("  file-token  \n", encoding="utf-8")
 
-    assert resolve_token(cwd=tmp_path, env={}) == "file-token"
+    token, _ = resolve_token(cwd=tmp_path, env={})
+    assert token == "file-token"
 
 
-def test_resolve_token_raises_when_missing(tmp_path: Path) -> None:
-    with pytest.raises(RuntimeError):
-        resolve_token(cwd=tmp_path, env={})
+def test_resolve_token_returns_not_configured_when_missing(tmp_path: Path) -> None:
+    token, source = resolve_token(cwd=tmp_path, env={})
+    assert token is None
+    assert source == "not configured"
 
 
 def test_resolve_repo_precedence_cli_over_config_over_git(

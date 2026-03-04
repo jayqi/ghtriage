@@ -113,9 +113,7 @@ def test_schema_table_details(sample_cwd: Path, monkeypatch, capsys) -> None:
     assert "BIGINT" in captured.out
 
 
-def test_schema_unknown_table_returns_runtime_error(
-    sample_cwd: Path, monkeypatch, capsys
-) -> None:
+def test_schema_unknown_table_returns_runtime_error(sample_cwd: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(sample_cwd)
 
     rc = run(["schema", "--table", "missing"])
@@ -123,3 +121,81 @@ def test_schema_unknown_table_returns_runtime_error(
     captured = capsys.readouterr()
     assert rc == 1
     assert "Table not found" in captured.err
+
+
+@pytest.fixture
+def status_cwd(tmp_path: Path) -> Path:
+    db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("CREATE SCHEMA github")
+    con.execute("CREATE TABLE github._ghtriage_meta (key VARCHAR PRIMARY KEY, value VARCHAR)")
+    con.execute("INSERT INTO github._ghtriage_meta VALUES ('repo', 'owner/repo')")
+    con.execute(
+        "INSERT INTO github._ghtriage_meta VALUES ('last_pull_at', '2026-02-28T14:22:57Z')"
+    )
+    con.execute("INSERT INTO github._ghtriage_meta VALUES ('last_full_pull', 'false')")
+    con.execute("CREATE TABLE github.issues (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("CREATE TABLE github.pulls (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("CREATE TABLE github.issue_comments (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("CREATE TABLE github.pull_comments (id BIGINT, updated_at TIMESTAMP)")
+    con.close()
+
+    return tmp_path
+
+
+def test_status_shows_db_info(status_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(status_cwd)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr("ghtriage.cli.resolve_repo", lambda: "owner/repo")
+
+    rc = run(["status"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "owner/repo" in captured.out
+    assert "2026-02-28" in captured.out
+    assert "GITHUB_TOKEN" in captured.out
+    assert captured.err == ""
+
+
+def test_status_not_yet_pulled_without_db(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr("ghtriage.cli.resolve_repo", lambda: "owner/repo")
+
+    rc = run(["status"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "not yet pulled" in captured.out
+    assert captured.err == ""
+
+
+def test_status_shows_mismatch_warning(status_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(status_cwd)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr("ghtriage.cli.resolve_repo", lambda: "owner/other-repo")
+
+    rc = run(["status"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "WARNING" in captured.out
+    assert "owner/other-repo" in captured.out
+    assert "owner/repo" in captured.out
+
+
+def test_status_handles_missing_config_repo(status_cwd: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(status_cwd)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(
+        "ghtriage.cli.resolve_repo", lambda: (_ for _ in ()).throw(RuntimeError("no remote"))
+    )
+
+    rc = run(["status"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "unknown" in captured.out
