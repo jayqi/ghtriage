@@ -37,6 +37,7 @@ TABLE_SCHEMAS = {
 - Returns schema unchanged if no `$ref`
 
 **`_extract_descriptions(schema: dict, spec: dict, prefix: str = "") -> dict[str, str]`**
+- Calls `_resolve_ref` at the start of each invocation, not just the top level — multi-level `$ref` chains are handled correctly at every depth
 - Recursively walks properties
 - For each property with a `description`, adds `{flattened_path: description}`
 - Flattened path: nested property names joined with `__` (e.g. `user.login` → `user__login`)
@@ -47,16 +48,20 @@ TABLE_SCHEMAS = {
 - Returns `{table_name: {column_name: description}}`
 - Calls `_extract_descriptions` for each of the 4 TABLE_SCHEMAS entries
 
-**`annotate_database(db_path: Path, descriptions: dict[str, dict[str, str]]) -> None`**
+**`build_table_descriptions(spec: dict) -> dict[str, str]`**
+- Returns `{table_name: description}` using the schema-level `description` field from each entry in TABLE_SCHEMAS
+- e.g. `"issues"` → `"Issues are a great way to keep track of tasks, enhancements, and bugs for your project."`
+
+**`annotate_database(db_path: Path, table_descs: dict[str, str], column_descs: dict[str, dict[str, str]]) -> None`**
 - Opens DuckDB connection
-- For each table and column, runs `COMMENT ON COLUMN github.{table}.{column} IS '{desc}'`
-- Skips columns not in the descriptions dict
-- Skips tables that don't exist in the database (handles partial pulls)
-- Escapes single quotes in description text
+- For each table, runs `COMMENT ON TABLE github.{table} IS '{desc}'` using `table_descs`
+- For each table and column, runs `COMMENT ON COLUMN github.{table}.{column} IS '{desc}'` using `column_descs`
+- Skips tables not in the descriptions dicts or not present in the database
+- Escapes single quotes in description text using `.replace("'", "''")` — DDL statements do not support bound parameters
 
 **`fetch_and_annotate(db_path: Path) -> None`**
 - Top-level function called from `run_pull()`
-- Calls `fetch_spec` → `build_column_descriptions` → `annotate_database`
+- Calls `fetch_spec` → `build_table_descriptions` + `build_column_descriptions` → `annotate_database`
 - Wraps everything in try/except — annotation failure prints a warning to stderr but does not fail the pull
 
 ### 2. Modify `src/ghtriage/pipeline.py`
@@ -97,9 +102,9 @@ ORDER BY c.ordinal_position
 
 ### 4. Modify `src/ghtriage/cli.py`
 
-In the `schema --table` handler:
-- If any row has a non-None description (4th element), include a `description` column in output
-- If all descriptions are None, output is unchanged (3 columns) — backwards compatible
+**`schema --table` handler**: Switch from the existing hardcoded pipe-separated format to `_format_table` so column widths are calculated properly (descriptions can be long). Include the description column when any row has a non-None value; omit it when all are None.
+
+**`schema` (no-args) handler**: After listing table names, show the table-level comment if one exists. Use `duckdb_tables()` or a `COMMENT ON TABLE` lookup to retrieve it.
 
 ### 5. Tests
 
@@ -110,8 +115,12 @@ In the `schema --table` handler:
 - `test_extract_descriptions_nested_object`: nested object property flattened with `__`
 - `test_extract_descriptions_array_not_recursed`: array-type property not expanded
 - `test_extract_descriptions_ref_resolved`: `$ref` resolved before extracting
+- `test_extract_descriptions_multi_level_ref`: nested `$ref` chain resolved at each recursive level
+- `test_extract_descriptions_single_quotes_escaped`: description containing `'` is escaped as `''`
 - `test_build_column_descriptions_structure`: returns correct table keys
-- `test_annotate_database_applies_comments`: real temp DuckDB, verify `duckdb_columns()` shows comment
+- `test_build_table_descriptions_structure`: returns correct table keys and schema-level descriptions
+- `test_annotate_database_applies_column_comments`: real temp DuckDB, verify `duckdb_columns()` shows comment
+- `test_annotate_database_applies_table_comments`: real temp DuckDB, verify `duckdb_tables()` shows comment
 - `test_annotate_database_skips_missing_table`: doesn't crash if table doesn't exist
 - `test_fetch_and_annotate_swallows_errors`: `fetch_spec` raises, no exception propagated
 
@@ -125,8 +134,9 @@ In the `schema --table` handler:
 - Add test: column without comment returns `None` in 4th element
 
 **Modify `tests/test_cli.py`:**
-- Add test: `schema --table` shows description column when comments are present
-- Verify existing test: `schema --table` without comments still shows 3-column output
+- Add test: `schema --table` shows description column (uses `_format_table`) when comments are present
+- Verify existing test: `schema --table` without comments still shows 3-column output (no description column)
+- Add test: `schema` (no-args) shows table descriptions when table comments are present
 
 ## Files changed
 
@@ -135,7 +145,7 @@ In the `schema --table` handler:
 | `src/ghtriage/annotations.py` | New |
 | `src/ghtriage/pipeline.py` | Add `fetch_and_annotate` call after `pipeline.run()` |
 | `src/ghtriage/query.py` | Add comment to `get_table_columns` return via `duckdb_columns()` join |
-| `src/ghtriage/cli.py` | Show description column in `schema --table` when present |
+| `src/ghtriage/cli.py` | Use `_format_table` in `schema --table`; show description column when present; show table descriptions in `schema` listing |
 | `tests/test_annotations.py` | New |
 | `tests/test_pipeline.py` | Mock `fetch_and_annotate` |
 | `tests/test_query.py` | Update for 4-tuple return type |
