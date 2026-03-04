@@ -4,7 +4,13 @@ from unittest.mock import MagicMock
 import duckdb
 import pytest
 
-from ghtriage.query import execute_query, get_table_columns, get_tables
+from ghtriage.query import (
+    StatusData,
+    execute_query,
+    get_status_data,
+    get_table_columns,
+    get_tables,
+)
 
 
 @pytest.fixture
@@ -89,3 +95,57 @@ def test_get_table_columns_returns_column_metadata(sample_cwd: Path) -> None:
 def test_get_table_columns_raises_for_missing_table(sample_cwd: Path) -> None:
     with pytest.raises(ValueError, match="Table not found"):
         get_table_columns("does_not_exist", cwd=sample_cwd)
+
+
+@pytest.fixture
+def status_cwd(tmp_path: Path) -> Path:
+    db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    con = duckdb.connect(str(db_path))
+    con.execute("CREATE SCHEMA github")
+    con.execute("CREATE TABLE github._ghtriage_meta (key VARCHAR PRIMARY KEY, value VARCHAR)")
+    con.execute("INSERT INTO github._ghtriage_meta VALUES ('repo', 'owner/testrepo')")
+    con.execute(
+        "INSERT INTO github._ghtriage_meta VALUES ('last_pull_at', '2026-02-28T14:22:57Z')"
+    )
+    con.execute("INSERT INTO github._ghtriage_meta VALUES ('last_full_pull', 'false')")
+    con.execute("CREATE TABLE github.issues (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("INSERT INTO github.issues VALUES (1, '2026-02-27 18:03:12')")
+    con.execute("INSERT INTO github.issues VALUES (2, '2026-02-26 09:00:00')")
+    con.execute("CREATE TABLE github.pulls (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("CREATE TABLE github.issue_comments (id BIGINT, updated_at TIMESTAMP)")
+    con.execute("CREATE TABLE github.pull_comments (id BIGINT, updated_at TIMESTAMP)")
+    con.close()
+
+    return tmp_path
+
+
+def test_get_status_data_returns_meta_fields(status_cwd: Path) -> None:
+    status = get_status_data(cwd=status_cwd)
+
+    assert isinstance(status, StatusData)
+    assert status.db_repo == "owner/testrepo"
+    assert status.last_pull_at == "2026-02-28T14:22:57Z"
+    assert status.last_full_pull is False
+    assert status.db_size_bytes > 0
+
+
+def test_get_status_data_returns_table_stats(status_cwd: Path) -> None:
+    status = get_status_data(cwd=status_cwd)
+
+    table_names = [name for name, _, _ in status.table_stats]
+    assert table_names == ["issues", "pulls", "issue_comments", "pull_comments"]
+
+    issues_stats = next(s for s in status.table_stats if s[0] == "issues")
+    assert issues_stats[1] == 2
+    assert issues_stats[2] is not None and "2026-02-27" in issues_stats[2]
+
+    pulls_stats = next(s for s in status.table_stats if s[0] == "pulls")
+    assert pulls_stats[1] == 0
+    assert pulls_stats[2] is None
+
+
+def test_get_status_data_raises_when_db_missing(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Database not found"):
+        get_status_data(cwd=tmp_path)

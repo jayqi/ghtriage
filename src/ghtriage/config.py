@@ -74,20 +74,21 @@ def _read_token_file(path: Path) -> str | None:
     return token or None
 
 
-def resolve_token(cwd: str | Path | None = None, env: dict[str, str] | None = None) -> str:
+def resolve_token(
+    cwd: str | Path | None = None, env: dict[str, str] | None = None
+) -> tuple[str | None, str]:
+    """Return (token, source_label) without raising if the token is missing."""
     env_data = env if env is not None else os.environ
     token = env_data.get("GITHUB_TOKEN")
     if token:
-        return token
+        return token, "GITHUB_TOKEN (env)"
 
     ghtriage_dir = get_ghtriage_dir(cwd=cwd, create=False)
     token = _read_token_file(ghtriage_dir / "token")
     if token:
-        return token
+        return token, ".ghtriage/token (file)"
 
-    raise RuntimeError(
-        "Missing GitHub token. Set GITHUB_TOKEN or place a token in .ghtriage/token."
-    )
+    return None, "not configured"
 
 
 def _default_repo_from_config(config_path: Path) -> str | None:
