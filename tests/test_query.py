@@ -115,18 +115,15 @@ def test_get_table_columns_returns_expected_comments(
 @pytest.mark.parametrize("add_comment", [False, True])
 def test_get_table_descriptions_returns_expected_values(sample_cwd: Path, add_comment: bool) -> None:
     db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
-    descriptions = get_table_descriptions(cwd=sample_cwd)
-    assert descriptions == {}
+    if not add_comment:
+        assert get_table_descriptions(cwd=sample_cwd) == {}
+        return
 
-    if add_comment:
-        with duckdb.connect(str(db_path)) as conn:
-            conn.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
 
     descriptions = get_table_descriptions(cwd=sample_cwd)
-    if add_comment:
-        assert descriptions["issues"] == "Issues track tasks and bugs."
-    else:
-        assert descriptions == {}
+    assert descriptions["issues"] == "Issues track tasks and bugs."
 
 
 def test_get_table_columns_raises_for_missing_table(sample_cwd: Path) -> None:
