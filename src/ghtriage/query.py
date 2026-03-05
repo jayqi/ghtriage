@@ -19,7 +19,7 @@ def _resolve_db_path(cwd: str | Path | None = None) -> Path:
 
 def execute_query(sql: str, cwd: str | Path | None = None) -> tuple[list[str], list[tuple]]:
     db_path = _resolve_db_path(cwd=cwd)
-    with duckdb.connect(str(db_path)) as conn:
+    with duckdb.connect(str(db_path), read_only=True) as conn:
         conn.execute("SET schema = 'github'")
         cursor = conn.execute(sql)
 
@@ -37,7 +37,7 @@ def get_tables(
     include_internal: bool = False,
 ) -> list[str]:
     db_path = _resolve_db_path(cwd=cwd)
-    with duckdb.connect(str(db_path)) as conn:
+    with duckdb.connect(str(db_path), read_only=True) as conn:
         rows = conn.execute(
             """
             SELECT table_name
@@ -58,7 +58,7 @@ def get_table_columns(
     cwd: str | Path | None = None,
 ) -> list[tuple[str, str, bool, str | None]]:
     db_path = _resolve_db_path(cwd=cwd)
-    with duckdb.connect(str(db_path)) as conn:
+    with duckdb.connect(str(db_path), read_only=True) as conn:
         rows = conn.execute(
             """
             SELECT c.column_name, c.data_type, c.is_nullable, dc.comment
@@ -86,7 +86,7 @@ def get_table_columns(
 def get_table_descriptions(cwd: str | Path | None = None) -> dict[str, str]:
     """Return {table_name: description} for tables that have a COMMENT ON TABLE set."""
     db_path = _resolve_db_path(cwd=cwd)
-    with duckdb.connect(str(db_path)) as conn:
+    with duckdb.connect(str(db_path), read_only=True) as conn:
         rows = conn.execute(
             "SELECT table_name, comment FROM duckdb_tables() WHERE schema_name = 'github'"
         ).fetchall()
@@ -107,7 +107,7 @@ def get_status_data(cwd: str | Path | None = None) -> StatusData:
     db_path = _resolve_db_path(cwd=cwd)
     db_size_bytes = db_path.stat().st_size
 
-    with duckdb.connect(str(db_path)) as conn:
+    with duckdb.connect(str(db_path), read_only=True) as conn:
         db_repo = None
         last_pull_at = None
         last_full_pull = None
