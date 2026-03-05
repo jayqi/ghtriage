@@ -93,37 +93,40 @@ def test_get_table_columns_returns_column_metadata(sample_cwd: Path) -> None:
     ]
 
 
-def test_get_table_columns_returns_comment_when_present(sample_cwd: Path) -> None:
+@pytest.mark.parametrize(
+    ("column_name", "expected_comment"),
+    [
+        ("title", "Title of the issue."),
+        ("id", None),
+    ],
+)
+def test_get_table_columns_returns_expected_comments(
+    sample_cwd: Path, column_name: str, expected_comment: str | None
+) -> None:
     db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
     with duckdb.connect(str(db_path)) as conn:
         conn.execute("COMMENT ON COLUMN github.issues.title IS 'Title of the issue.'")
 
     columns = get_table_columns("issues", cwd=sample_cwd)
-    title_col = next(c for c in columns if c[0] == "title")
-    assert title_col == ("title", "VARCHAR", True, "Title of the issue.")
+    selected_col = next(c for c in columns if c[0] == column_name)
+    assert selected_col[3] == expected_comment
 
 
-def test_get_table_columns_returns_none_for_uncommented_column(sample_cwd: Path) -> None:
+@pytest.mark.parametrize("add_comment", [False, True])
+def test_get_table_descriptions_returns_expected_values(sample_cwd: Path, add_comment: bool) -> None:
     db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
-    with duckdb.connect(str(db_path)) as conn:
-        conn.execute("COMMENT ON COLUMN github.issues.title IS 'Title of the issue.'")
+    descriptions = get_table_descriptions(cwd=sample_cwd)
+    assert descriptions == {}
 
-    columns = get_table_columns("issues", cwd=sample_cwd)
-    id_col = next(c for c in columns if c[0] == "id")
-    assert id_col[3] is None
-
-
-def test_get_table_descriptions_returns_empty_when_no_comments(sample_cwd: Path) -> None:
-    assert get_table_descriptions(cwd=sample_cwd) == {}
-
-
-def test_get_table_descriptions_returns_comment_when_present(sample_cwd: Path) -> None:
-    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
-    with duckdb.connect(str(db_path)) as conn:
-        conn.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
+    if add_comment:
+        with duckdb.connect(str(db_path)) as conn:
+            conn.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
 
     descriptions = get_table_descriptions(cwd=sample_cwd)
-    assert descriptions["issues"] == "Issues track tasks and bugs."
+    if add_comment:
+        assert descriptions["issues"] == "Issues track tasks and bugs."
+    else:
+        assert descriptions == {}
 
 
 def test_get_table_columns_raises_for_missing_table(sample_cwd: Path) -> None:

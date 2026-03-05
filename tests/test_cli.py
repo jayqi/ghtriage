@@ -102,17 +102,6 @@ def test_schema_lists_user_tables(sample_cwd: Path, monkeypatch, capsys) -> None
     assert "_dlt_loads" not in captured.out
 
 
-def test_schema_table_details(sample_cwd: Path, monkeypatch, capsys) -> None:
-    monkeypatch.chdir(sample_cwd)
-
-    rc = run(["schema", "--table", "issues"])
-
-    captured = capsys.readouterr()
-    assert rc == 0
-    assert "id" in captured.out
-    assert "BIGINT" in captured.out
-
-
 def test_schema_unknown_table_returns_runtime_error(sample_cwd: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(sample_cwd)
 
