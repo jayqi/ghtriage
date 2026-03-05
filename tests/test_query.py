@@ -51,7 +51,7 @@ def test_execute_query_returns_empty_when_cursor_has_no_description(
     connection.__enter__.return_value = connection
     connection.__exit__.return_value = None
 
-    monkeypatch.setattr("ghtriage.query.duckdb.connect", lambda _: connection)
+    monkeypatch.setattr("ghtriage.query.duckdb.connect", lambda *_args, **_kwargs: connection)
 
     columns, rows = execute_query(
         "CREATE TABLE write_probe (id BIGINT)",
