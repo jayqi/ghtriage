@@ -7,7 +7,7 @@ from typing import Sequence
 
 from ghtriage.config import get_db_path, resolve_repo, resolve_token
 from ghtriage.pipeline import run_pull
-from ghtriage.query import execute_query, get_status_data, get_table_columns, get_tables
+from ghtriage.query import execute_query, get_status_data, get_table_columns, get_table_descriptions, get_tables
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -116,15 +116,29 @@ def _run_schema(args: argparse.Namespace) -> int:
     try:
         if args.table:
             columns = get_table_columns(args.table)
-            print("column_name | data_type | nullable")
-            print("------------+-----------+---------")
-            for name, data_type, nullable in columns:
-                print(f"{name} | {data_type} | {nullable}")
+            has_descriptions = any(desc is not None for _, _, _, desc in columns)
+            if has_descriptions:
+                _format_table(
+                    ["column_name", "data_type", "nullable", "description"],
+                    [(name, dtype, str(nullable), desc or "") for name, dtype, nullable, desc in columns],
+                )
+            else:
+                _format_table(
+                    ["column_name", "data_type", "nullable"],
+                    [(name, dtype, str(nullable)) for name, dtype, nullable, _ in columns],
+                )
             return 0
 
         tables = get_tables()
-        for table in tables:
-            print(table)
+        descriptions = get_table_descriptions()
+        if any(t in descriptions for t in tables):
+            _format_table(
+                ["table", "description"],
+                [(t, descriptions.get(t, "")) for t in tables],
+            )
+        else:
+            for table in tables:
+                print(table)
         return 0
     except Exception as exc:
         print(f"Schema inspection failed: {exc}", file=sys.stderr)

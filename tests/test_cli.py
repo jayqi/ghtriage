@@ -123,6 +123,68 @@ def test_schema_unknown_table_returns_runtime_error(sample_cwd: Path, monkeypatc
     assert "Table not found" in captured.err
 
 
+def test_schema_table_details_shows_description_column_when_comments_present(
+    sample_cwd: Path, monkeypatch, capsys
+) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
+    con = duckdb.connect(str(db_path))
+    con.execute("COMMENT ON COLUMN github.issues.title IS 'Title of the issue.'")
+    con.close()
+
+    monkeypatch.chdir(sample_cwd)
+
+    rc = run(["schema", "--table", "issues"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "description" in captured.out
+    assert "Title of the issue." in captured.out
+
+
+def test_schema_table_details_omits_description_column_when_no_comments(
+    sample_cwd: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(sample_cwd)
+
+    rc = run(["schema", "--table", "issues"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "description" not in captured.out
+    assert "id" in captured.out
+    assert "BIGINT" in captured.out
+
+
+def test_schema_listing_shows_table_descriptions_when_present(
+    sample_cwd: Path, monkeypatch, capsys
+) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
+    con = duckdb.connect(str(db_path))
+    con.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
+    con.close()
+
+    monkeypatch.chdir(sample_cwd)
+
+    rc = run(["schema"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "issues" in captured.out
+    assert "Issues track tasks and bugs." in captured.out
+
+
+def test_schema_listing_plain_when_no_table_descriptions(
+    sample_cwd: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(sample_cwd)
+
+    rc = run(["schema"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "issues" in captured.out.splitlines()
+
+
 @pytest.fixture
 def status_cwd(tmp_path: Path) -> Path:
     db_path = tmp_path / ".ghtriage" / "ghtriage.duckdb"

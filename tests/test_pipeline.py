@@ -22,6 +22,8 @@ def _install_pipeline_mocks(monkeypatch):
     monkeypatch.setattr("ghtriage.pipeline.rest_api_source", mock_rest_api_source)
     mock_write_meta = Mock()
     monkeypatch.setattr("ghtriage.pipeline._write_meta", mock_write_meta)
+    mock_fetch_and_annotate = Mock()
+    monkeypatch.setattr("ghtriage.pipeline.fetch_and_annotate", mock_fetch_and_annotate)
 
     return (
         sentinel_destination,
@@ -32,6 +34,7 @@ def _install_pipeline_mocks(monkeypatch):
         mock_pipeline_factory,
         mock_rest_api_source,
         mock_write_meta,
+        mock_fetch_and_annotate,
     )
 
 
@@ -45,6 +48,7 @@ def test_run_pull_smoke_full_false_calls_pipeline_run_once(tmp_path: Path, monke
         mock_pipeline_factory,
         mock_rest_api_source,
         mock_write_meta,
+        mock_fetch_and_annotate,
     ) = _install_pipeline_mocks(monkeypatch)
 
     load_info, meta_error = run_pull(repo="owner/repo", token="tok", full=False, cwd=tmp_path)
@@ -70,6 +74,7 @@ def test_run_pull_smoke_full_false_calls_pipeline_run_once(tmp_path: Path, monke
     assert resource_names == ["issues", "pulls", "issue_comments", "pull_comments"]
 
     mock_write_meta.assert_called_once_with(db_path=db_path, repo="owner/repo", full=False)
+    mock_fetch_and_annotate.assert_called_once_with(db_path)
 
 
 def test_run_pull_full_true_removes_existing_state_then_runs(tmp_path: Path, monkeypatch) -> None:
@@ -82,6 +87,7 @@ def test_run_pull_full_true_removes_existing_state_then_runs(tmp_path: Path, mon
         _mock_pipeline_factory,
         _mock_rest_api_source,
         _mock_write_meta,
+        _mock_fetch_and_annotate,
     ) = _install_pipeline_mocks(monkeypatch)
 
     ghtriage_dir = tmp_path / ".ghtriage"
@@ -112,6 +118,7 @@ def test_run_pull_full_true_handles_missing_state(tmp_path: Path, monkeypatch) -
         _mock_pipeline_factory,
         _mock_rest_api_source,
         _mock_write_meta,
+        _mock_fetch_and_annotate,
     ) = _install_pipeline_mocks(monkeypatch)
 
     load_info, meta_error = run_pull(repo="owner/repo", token="tok", full=True, cwd=tmp_path)
@@ -131,6 +138,7 @@ def test_run_pull_builds_source_with_repo_and_token(tmp_path: Path, monkeypatch)
         _mock_pipeline_factory,
         mock_rest_api_source,
         _mock_write_meta,
+        _mock_fetch_and_annotate,
     ) = _install_pipeline_mocks(monkeypatch)
 
     run_pull(repo="abc/def", token="secret", full=False, cwd=tmp_path)

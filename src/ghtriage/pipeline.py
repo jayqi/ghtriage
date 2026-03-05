@@ -7,6 +7,7 @@ import dlt
 from dlt.sources.rest_api import rest_api_source
 import duckdb
 
+from ghtriage.annotations import fetch_and_annotate
 from ghtriage.config import get_db_path, get_pipelines_dir
 
 
@@ -168,4 +169,5 @@ def run_pull(
         _write_meta(db_path=db_path, repo=repo, full=full)
     except Exception as exc:
         meta_error = exc
+    fetch_and_annotate(db_path)
     return load_info, meta_error

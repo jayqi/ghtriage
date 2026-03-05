@@ -9,6 +9,7 @@ from ghtriage.query import (
     execute_query,
     get_status_data,
     get_table_columns,
+    get_table_descriptions,
     get_tables,
 )
 
@@ -87,9 +88,42 @@ def test_get_tables_can_include_internal(sample_cwd: Path) -> None:
 
 def test_get_table_columns_returns_column_metadata(sample_cwd: Path) -> None:
     assert get_table_columns("issues", cwd=sample_cwd) == [
-        ("id", "BIGINT", True),
-        ("title", "VARCHAR", True),
+        ("id", "BIGINT", True, None),
+        ("title", "VARCHAR", True, None),
     ]
+
+
+def test_get_table_columns_returns_comment_when_present(sample_cwd: Path) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("COMMENT ON COLUMN github.issues.title IS 'Title of the issue.'")
+
+    columns = get_table_columns("issues", cwd=sample_cwd)
+    title_col = next(c for c in columns if c[0] == "title")
+    assert title_col == ("title", "VARCHAR", True, "Title of the issue.")
+
+
+def test_get_table_columns_returns_none_for_uncommented_column(sample_cwd: Path) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("COMMENT ON COLUMN github.issues.title IS 'Title of the issue.'")
+
+    columns = get_table_columns("issues", cwd=sample_cwd)
+    id_col = next(c for c in columns if c[0] == "id")
+    assert id_col[3] is None
+
+
+def test_get_table_descriptions_returns_empty_when_no_comments(sample_cwd: Path) -> None:
+    assert get_table_descriptions(cwd=sample_cwd) == {}
+
+
+def test_get_table_descriptions_returns_comment_when_present(sample_cwd: Path) -> None:
+    db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("COMMENT ON TABLE github.issues IS 'Issues track tasks and bugs.'")
+
+    descriptions = get_table_descriptions(cwd=sample_cwd)
+    assert descriptions["issues"] == "Issues track tasks and bugs."
 
 
 def test_get_table_columns_raises_for_missing_table(sample_cwd: Path) -> None:
