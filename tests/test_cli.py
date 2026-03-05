@@ -86,9 +86,7 @@ def test_query_returns_runtime_error_for_bad_sql(sample_cwd: Path, monkeypatch, 
     assert captured.err
 
 
-def test_query_rejects_write_sql_in_read_only_mode(
-    sample_cwd: Path, monkeypatch, capsys
-) -> None:
+def test_query_rejects_write_sql_in_read_only_mode(sample_cwd: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(sample_cwd)
 
     rc = run(["query", "CREATE TABLE write_probe (id BIGINT)"])
