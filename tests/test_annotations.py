@@ -207,6 +207,30 @@ def test_build_column_descriptions_structure(minimal_spec: dict) -> None:
     assert "draft" in result["pulls"]
 
 
+def test_build_column_descriptions_flattens_inline_nested_object() -> None:
+    spec = {
+        "components": {
+            "schemas": {
+                "issue": {
+                    "properties": {
+                        "user": {
+                            "type": "object",
+                            "properties": {
+                                "login": {"description": "The GitHub username."},
+                            },
+                        }
+                    }
+                },
+                "pull-request-simple": {"properties": {}},
+                "issue-comment": {"properties": {}},
+                "pull-request-review-comment": {"properties": {}},
+            }
+        }
+    }
+    result = build_column_descriptions(spec)
+    assert result["issues"]["user__login"] == "The GitHub username."
+
+
 def test_build_table_descriptions_structure(minimal_spec: dict) -> None:
     result = build_table_descriptions(minimal_spec)
     assert set(result.keys()) == {"issues", "pulls", "issue_comments", "pull_comments"}
@@ -289,12 +313,15 @@ def test_fetch_and_annotate_applies_comments_from_spec(annotated_db: Path) -> No
                     "description": "An issue table.",
                     "properties": {
                         "title": {"description": "Issue title."},
-                        "state": {"description": "Issue state."},
+                        "state": {"description": "Either 'open' or 'closed'."},
                     },
                 },
                 "pull-request-simple": {"description": "A pull request.", "properties": {}},
                 "issue-comment": {"description": "An issue comment.", "properties": {}},
-                "pull-request-review-comment": {"description": "A PR review comment.", "properties": {}},
+                "pull-request-review-comment": {
+                    "description": "A PR review comment.",
+                    "properties": {},
+                },
             }
         }
     }
@@ -316,10 +343,12 @@ def test_fetch_and_annotate_applies_comments_from_spec(annotated_db: Path) -> No
     assert table_comment is not None
     assert table_comment[0] == "An issue table."
     assert column_comments["title"] == "Issue title."
-    assert column_comments["state"] == "Issue state."
+    assert column_comments["state"] == "Either 'open' or 'closed'."
 
 
-def test_fetch_and_annotate_swallows_errors(annotated_db: Path, capsys: pytest.CaptureFixture) -> None:
+def test_fetch_and_annotate_swallows_errors(
+    annotated_db: Path, capsys: pytest.CaptureFixture
+) -> None:
     """If fetch_spec raises, fetch_and_annotate prints a warning but does not propagate."""
     with patch("ghtriage.annotations.fetch_spec", side_effect=RuntimeError("network error")):
         fetch_and_annotate(annotated_db)

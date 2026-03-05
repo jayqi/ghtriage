@@ -113,7 +113,9 @@ def test_get_table_columns_returns_expected_comments(
 
 
 @pytest.mark.parametrize("add_comment", [False, True])
-def test_get_table_descriptions_returns_expected_values(sample_cwd: Path, add_comment: bool) -> None:
+def test_get_table_descriptions_returns_expected_values(
+    sample_cwd: Path, add_comment: bool
+) -> None:
     db_path = sample_cwd / ".ghtriage" / "ghtriage.duckdb"
     if not add_comment:
         assert get_table_descriptions(cwd=sample_cwd) == {}
