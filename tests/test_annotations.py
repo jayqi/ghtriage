@@ -121,7 +121,7 @@ def test_fetch_spec_http_error() -> None:
 def test_resolve_ref_no_ref() -> None:
     schema = {"type": "string", "description": "A string"}
     spec = {}
-    assert _resolve_ref(schema, spec) is schema
+    assert _resolve_ref(schema, spec) == schema
 
 
 def test_resolve_ref_resolves_component() -> None:
@@ -145,26 +145,6 @@ def test_extract_descriptions_scalar(minimal_spec: dict) -> None:
     assert "body" not in result  # no description on body
 
 
-def test_extract_descriptions_nested_object() -> None:
-    spec = {
-        "components": {"schemas": {}},
-    }
-    schema = {
-        "properties": {
-            "user": {
-                "type": "object",
-                "properties": {
-                    "login": {"description": "The GitHub username."},
-                    "id": {},
-                },
-            }
-        }
-    }
-    result = _extract_descriptions(schema, spec)
-    assert result["user__login"] == "The GitHub username."
-    assert "user__id" not in result
-
-
 def test_extract_descriptions_array_not_recursed() -> None:
     spec = {"components": {"schemas": {}}}
     schema = {
@@ -186,27 +166,6 @@ def test_extract_descriptions_array_not_recursed() -> None:
     assert result["labels"] == "Labels on the issue."
     # But nested items are not recursed into
     assert "labels__name" not in result
-
-
-def test_extract_descriptions_ref_resolved() -> None:
-    spec = {
-        "components": {
-            "schemas": {
-                "simple-user": {
-                    "properties": {
-                        "login": {"description": "The GitHub username."},
-                    }
-                }
-            }
-        }
-    }
-    schema = {
-        "properties": {
-            "user": {"$ref": "#/components/schemas/simple-user"},
-        }
-    }
-    result = _extract_descriptions(schema, spec)
-    assert result["user__login"] == "The GitHub username."
 
 
 def test_extract_descriptions_multi_level_ref() -> None:
@@ -236,18 +195,6 @@ def test_extract_descriptions_multi_level_ref() -> None:
     assert result["milestone__creator__login"] == "Creator login."
 
 
-def test_extract_descriptions_single_quotes_in_description() -> None:
-    """Single quotes in descriptions are returned as-is; escaping happens in annotate_database."""
-    spec = {"components": {"schemas": {}}}
-    schema = {
-        "properties": {
-            "state": {"description": "Either 'open' or 'closed'."},
-        }
-    }
-    result = _extract_descriptions(schema, spec)
-    assert result["state"] == "Either 'open' or 'closed'."
-
-
 # ---------------------------------------------------------------------------
 # build_column_descriptions / build_table_descriptions
 # ---------------------------------------------------------------------------
@@ -258,6 +205,30 @@ def test_build_column_descriptions_structure(minimal_spec: dict) -> None:
     assert set(result.keys()) == {"issues", "pulls", "issue_comments", "pull_comments"}
     assert "number" in result["issues"]
     assert "draft" in result["pulls"]
+
+
+def test_build_column_descriptions_flattens_inline_nested_object() -> None:
+    spec = {
+        "components": {
+            "schemas": {
+                "issue": {
+                    "properties": {
+                        "user": {
+                            "type": "object",
+                            "properties": {
+                                "login": {"description": "The GitHub username."},
+                            },
+                        }
+                    }
+                },
+                "pull-request-simple": {"properties": {}},
+                "issue-comment": {"properties": {}},
+                "pull-request-review-comment": {"properties": {}},
+            }
+        }
+    }
+    result = build_column_descriptions(spec)
+    assert result["issues"]["user__login"] == "The GitHub username."
 
 
 def test_build_table_descriptions_structure(minimal_spec: dict) -> None:
@@ -334,8 +305,53 @@ def test_annotate_database_skips_missing_column(annotated_db: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_and_annotate_swallows_errors(annotated_db: Path) -> None:
+def test_fetch_and_annotate_applies_comments_from_spec(annotated_db: Path) -> None:
+    spec = {
+        "components": {
+            "schemas": {
+                "issue": {
+                    "description": "An issue table.",
+                    "properties": {
+                        "title": {"description": "Issue title."},
+                        "state": {"description": "Either 'open' or 'closed'."},
+                    },
+                },
+                "pull-request-simple": {"description": "A pull request.", "properties": {}},
+                "issue-comment": {"description": "An issue comment.", "properties": {}},
+                "pull-request-review-comment": {
+                    "description": "A PR review comment.",
+                    "properties": {},
+                },
+            }
+        }
+    }
+    with patch("ghtriage.annotations.fetch_spec", return_value=spec):
+        fetch_and_annotate(annotated_db)
+
+    with duckdb.connect(str(annotated_db)) as conn:
+        table_comment = conn.execute(
+            "SELECT comment FROM duckdb_tables() "
+            "WHERE schema_name = 'github' AND table_name = 'issues'"
+        ).fetchone()
+        column_comments = dict(
+            conn.execute(
+                "SELECT column_name, comment FROM duckdb_columns() "
+                "WHERE schema_name = 'github' AND table_name = 'issues'"
+            ).fetchall()
+        )
+
+    assert table_comment is not None
+    assert table_comment[0] == "An issue table."
+    assert column_comments["title"] == "Issue title."
+    assert column_comments["state"] == "Either 'open' or 'closed'."
+
+
+def test_fetch_and_annotate_swallows_errors(
+    annotated_db: Path, capsys: pytest.CaptureFixture
+) -> None:
     """If fetch_spec raises, fetch_and_annotate prints a warning but does not propagate."""
     with patch("ghtriage.annotations.fetch_spec", side_effect=RuntimeError("network error")):
-        # Should not raise
         fetch_and_annotate(annotated_db)
+
+    captured = capsys.readouterr()
+    assert "schema annotation failed" in captured.err
