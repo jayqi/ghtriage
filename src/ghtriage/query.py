@@ -77,7 +77,10 @@ def get_table_columns(
     if not rows:
         raise ValueError(f"Table not found in github schema: {table_name}")
 
-    return [(name, data_type, is_nullable == "YES", comment) for name, data_type, is_nullable, comment in rows]
+    return [
+        (name, data_type, is_nullable == "YES", comment)
+        for name, data_type, is_nullable, comment in rows
+    ]
 
 
 def get_table_descriptions(cwd: str | Path | None = None) -> dict[str, str]:

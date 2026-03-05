@@ -7,7 +7,13 @@ from typing import Sequence
 
 from ghtriage.config import get_db_path, resolve_repo, resolve_token
 from ghtriage.pipeline import run_pull
-from ghtriage.query import execute_query, get_status_data, get_table_columns, get_table_descriptions, get_tables
+from ghtriage.query import (
+    execute_query,
+    get_status_data,
+    get_table_columns,
+    get_table_descriptions,
+    get_tables,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -120,7 +126,10 @@ def _run_schema(args: argparse.Namespace) -> int:
             if has_descriptions:
                 _format_table(
                     ["column_name", "data_type", "nullable", "description"],
-                    [(name, dtype, str(nullable), desc or "") for name, dtype, nullable, desc in columns],
+                    [
+                        (name, dtype, str(nullable), desc or "")
+                        for name, dtype, nullable, desc in columns
+                    ],
                 )
             else:
                 _format_table(

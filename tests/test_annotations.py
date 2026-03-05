@@ -1,16 +1,12 @@
 import json
-import os
-import tempfile
-import urllib.error
-from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import urllib.error
 
 import duckdb
 import pytest
 
 from ghtriage.annotations import (
-    OPENAPI_SPEC_URL,
     _extract_descriptions,
     _resolve_ref,
     annotate_database,
@@ -19,7 +15,6 @@ from ghtriage.annotations import (
     fetch_and_annotate,
     fetch_spec,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -235,7 +230,7 @@ def test_extract_descriptions_multi_level_ref() -> None:
 
 
 def test_extract_descriptions_single_quotes_in_description() -> None:
-    """Descriptions with single quotes are returned as-is; escaping happens in annotate_database."""
+    """Single quotes in descriptions are returned as-is; escaping happens in annotate_database."""
     spec = {"components": {"schemas": {}}}
     schema = {
         "properties": {
@@ -334,8 +329,6 @@ def test_annotate_database_skips_missing_column(annotated_db: Path) -> None:
 
 def test_fetch_and_annotate_swallows_errors(annotated_db: Path) -> None:
     """If fetch_spec raises, fetch_and_annotate prints a warning but does not propagate."""
-    with patch(
-        "ghtriage.annotations.fetch_spec", side_effect=RuntimeError("network error")
-    ):
+    with patch("ghtriage.annotations.fetch_spec", side_effect=RuntimeError("network error")):
         # Should not raise
         fetch_and_annotate(annotated_db)

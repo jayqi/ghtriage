@@ -1,8 +1,8 @@
 import json
+from pathlib import Path
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 import duckdb
 
@@ -20,7 +20,7 @@ TABLE_SCHEMAS = {
 def fetch_spec(url: str) -> dict:
     """Download and parse an OpenAPI spec from a URL."""
     try:
-        with urllib.request.urlopen(url) as response:  # noqa: S310
+        with urllib.request.urlopen(url) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Failed to fetch OpenAPI spec: HTTP {exc.code} {exc.reason}") from exc
