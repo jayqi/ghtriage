@@ -49,8 +49,15 @@ force-sort-within-sections = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--cov=ghtriage --cov-report=term --cov-report=html --cov-report=xml --cov-append"
+addopts = "--cov=ghtriage --cov-report=term --cov-report=html --cov-report=xml"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["ghtriage"]
+# debug = ["pathmap"]  # Useful if path mapping isn't working as expected
+
+[tool.coverage.paths]
+ghtriage = [
+  "src/ghtriage/",
+  "*/site-packages/ghtriage/"
+]
