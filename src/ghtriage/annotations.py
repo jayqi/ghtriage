@@ -7,6 +7,7 @@ import urllib.request
 import duckdb
 
 OPENAPI_SPEC_URL = "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json"
+OPENAPI_FETCH_TIMEOUT_SECONDS = 30
 
 # Maps DuckDB table name → OpenAPI component schema name
 TABLE_SCHEMAS = {
@@ -17,10 +18,10 @@ TABLE_SCHEMAS = {
 }
 
 
-def fetch_spec(url: str) -> dict:
+def fetch_spec(url: str, timeout_seconds: int = OPENAPI_FETCH_TIMEOUT_SECONDS) -> dict:
     """Download and parse an OpenAPI spec from a URL."""
     try:
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=timeout_seconds) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Failed to fetch OpenAPI spec: HTTP {exc.code} {exc.reason}") from exc

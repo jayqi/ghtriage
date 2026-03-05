@@ -7,6 +7,7 @@ import duckdb
 import pytest
 
 from ghtriage.annotations import (
+    OPENAPI_FETCH_TIMEOUT_SECONDS,
     _extract_descriptions,
     _resolve_ref,
     annotate_database,
@@ -87,10 +88,16 @@ def test_fetch_spec_success() -> None:
     mock_response.__enter__ = lambda s: s
     mock_response.__exit__ = MagicMock(return_value=False)
 
-    with patch("ghtriage.annotations.urllib.request.urlopen", return_value=mock_response):
+    with patch(
+        "ghtriage.annotations.urllib.request.urlopen", return_value=mock_response
+    ) as mock_urlopen:
         result = fetch_spec("https://example.com/spec.json")
 
     assert result == payload
+    mock_urlopen.assert_called_once_with(
+        "https://example.com/spec.json",
+        timeout=OPENAPI_FETCH_TIMEOUT_SECONDS,
+    )
 
 
 def test_fetch_spec_http_error() -> None:
