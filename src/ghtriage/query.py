@@ -56,23 +56,41 @@ def get_tables(
 def get_table_columns(
     table_name: str,
     cwd: str | Path | None = None,
-) -> list[tuple[str, str, bool]]:
+) -> list[tuple[str, str, bool, str | None]]:
     db_path = _resolve_db_path(cwd=cwd)
     with duckdb.connect(str(db_path)) as conn:
         rows = conn.execute(
             """
-            SELECT column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'github' AND table_name = ?
-            ORDER BY ordinal_position
+            SELECT c.column_name, c.data_type, c.is_nullable, dc.comment
+            FROM information_schema.columns c
+            LEFT JOIN (
+                SELECT column_name, comment
+                FROM duckdb_columns()
+                WHERE schema_name = 'github' AND table_name = ?
+            ) dc ON dc.column_name = c.column_name
+            WHERE c.table_schema = 'github' AND c.table_name = ?
+            ORDER BY c.ordinal_position
             """,
-            [table_name],
+            [table_name, table_name],
         ).fetchall()
 
     if not rows:
         raise ValueError(f"Table not found in github schema: {table_name}")
 
-    return [(name, data_type, is_nullable == "YES") for name, data_type, is_nullable in rows]
+    return [
+        (name, data_type, is_nullable == "YES", comment)
+        for name, data_type, is_nullable, comment in rows
+    ]
+
+
+def get_table_descriptions(cwd: str | Path | None = None) -> dict[str, str]:
+    """Return {table_name: description} for tables that have a COMMENT ON TABLE set."""
+    db_path = _resolve_db_path(cwd=cwd)
+    with duckdb.connect(str(db_path)) as conn:
+        rows = conn.execute(
+            "SELECT table_name, comment FROM duckdb_tables() WHERE schema_name = 'github'"
+        ).fetchall()
+    return {name: comment for name, comment in rows if comment}
 
 
 @dataclass
