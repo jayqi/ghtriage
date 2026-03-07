@@ -17,7 +17,10 @@ from ghtriage.query import (
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ghtriage")
+    parser = argparse.ArgumentParser(
+        prog="ghtriage",
+        description="Query this repo's GitHub issues, PRs, and comments using SQL.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     pull_parser = subparsers.add_parser("pull", help="Pull GitHub data into local DuckDB")
